@@ -38,10 +38,10 @@ def haproxy_port_labels(labels, port_index):
     }
 
 # Below is roughly copied from marathon-lb:
+# https://github.com/mesosphere/marathon-lb/blob/v1.11.2/utils.py#L314-L437
 
 
 def get_task_ip_and_ports(app, task):
-    # TODO
     mode = _get_networking_mode(app)
     task_ip = _get_task_ip(task, mode)
     task_ports = _get_app_task_ports(app, task, mode)
@@ -122,6 +122,7 @@ def _get_app_port_mappings(app):
 
 
 # Below is copy/pasta-ed from marathon-acme:
+# https://github.com/praekeltfoundation/marathon-acme/blob/0.5.1/marathon_acme/marathon_util.py
 
 def get_number_of_app_ports(app):
     """

@@ -10,10 +10,12 @@ def Duration(seconds, nanos=0):
 
 
 def Payload(data):
+    # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/health_check.proto#envoy-api-msg-healthcheck-payload
     return {"text": binascii.hexlify(data).decode("utf-8")}
 
 
 def TcpHealthCheck(send=b'', receive=[]):
+    # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/health_check.proto#healthcheck-tcphealthcheck
     return {
         "send": Payload(send),
         "receive": [Payload(r) for r in receive],
@@ -21,12 +23,14 @@ def TcpHealthCheck(send=b'', receive=[]):
 
 
 def Any(type_url, data):
+    # https://developers.google.com/protocol-buffers/docs/proto3#json
     res = {"@type": type_url}
     res.update(data)
     return res
 
 
 def DiscoveryResponse(version_info, resources, type_url):
+    # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/discovery.proto#discoveryresponse
     return {
         "version_info": version_info,
         "resources": [Any(type_url, r) for r in resources],
