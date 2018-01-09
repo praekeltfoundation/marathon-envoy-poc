@@ -80,12 +80,17 @@ def get_app_port_labels(app):
 @flask_app.route("/v2/discovery:clusters", methods=["POST"])
 def clusters():
     clusters = []
+    max_version = "0"
     for app in get_marathon().get_apps():
         port_labels = get_app_port_labels(app)
         for index, labels in enumerate(port_labels):
             if labels is None:
                 continue
 
+            max_version = max(
+                max_version, app["versionInfo"]["lastConfigChangeAt"])
+
+            # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/cds.proto#cluster
             name = "{}_{}".format(app["id"], index)
             clusters.append({
                 "name": name,
@@ -108,7 +113,7 @@ def clusters():
                 ],
             })
 
-    return jsonify(DiscoveryResponse("0", clusters, TYPE_CDS))
+    return jsonify(DiscoveryResponse(max_version, clusters, TYPE_CDS))
 
 
 def get_cluster_load_assignment(cluster_name):
