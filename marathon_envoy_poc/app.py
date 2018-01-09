@@ -92,6 +92,13 @@ def clusters():
 
             # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/cds.proto#cluster
             name = "{}_{}".format(app["id"], index)
+
+            if len(name) > 60:
+                flask_app.logger.warn(
+                    "Cluster name %s is too long. It will be truncated.",
+                    name)
+                name = "[...]" + name[-55:]
+
             clusters.append({
                 "name": name,
                 "type": "EDS",
