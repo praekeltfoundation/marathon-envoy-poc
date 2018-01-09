@@ -116,29 +116,25 @@ def clusters():
     return jsonify(DiscoveryResponse(max_version, clusters, TYPE_CDS))
 
 
-def get_cluster_load_assignment(cluster_name):
-    app_id, port_index = cluster_name.rsplit("_", 1)
-    port_index = int(port_index)
-    app_with_tasks = get_marathon().get_app(app_id, embed=["app.tasks"])
-
-    port_labels = get_app_port_labels(app_with_tasks)
+def get_cluster_load_assignment(cluster_name, app, tasks, port_index):
+    port_labels = get_app_port_labels(app)
 
     # We have to check these things because they may have changed since the
     # CDS request was made.
     if port_index >= len(port_labels):
         flask_app.logger.warn(
             "App %s with port index %d is outside the range of ports (%d)",
-            app_id, port_index, len(port_labels))
+            app["id"], port_index, len(port_labels))
         return ClusterLoadAssignment(cluster_name, [])  # no endpoints
 
     if port_labels[port_index] is None:
         flask_app.logger.warn(
-            "App %s with port index %d has no labels", app_id, port_index)
+            "App %s with port index %d has no labels", app["id"], port_index)
         return ClusterLoadAssignment(cluster_name, [])  # no endpoints
 
     endpoints = []
-    for task in app_with_tasks["tasks"]:
-        ip, ports = get_task_ip_and_ports(app_with_tasks, task)
+    for task in tasks:
+        ip, ports = get_task_ip_and_ports(app, task)
         if ip is None:
             flask_app.logger.warn("Couldn't find IP for task %s", task["id"])
             continue
@@ -162,9 +158,22 @@ def endpoints():
     discovery_request = request.get_json()
     resource_names = discovery_request["resource_names"]
 
-    clas = [get_cluster_load_assignment(n) for n in resource_names]
+    cluster_load_assignments = []
+    max_version = "0"
+    for cluster_name in resource_names:
+        app_id, port_index = cluster_name.rsplit("_", 1)
+        port_index = int(port_index)
 
-    return jsonify(DiscoveryResponse("0", clas, TYPE_EDS))
+        app = get_marathon().get_app(app_id, embed=["app.tasks"])
+        tasks = app["tasks"]
+        cluster_load_assignments.append(
+            get_cluster_load_assignment(cluster_name, app, tasks, port_index))
+
+        for task in tasks:
+            max_version = max(max_version, task.get("startedAt", "0"))
+
+    return jsonify(
+        DiscoveryResponse(max_version, cluster_load_assignments, TYPE_EDS))
 
 
 @flask_app.route("/v2/discovery:listeners", methods=["POST"])
