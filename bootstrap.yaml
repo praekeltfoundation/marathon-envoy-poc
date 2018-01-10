@@ -18,7 +18,7 @@ dynamic_resources:
 static_resources:
   clusters:
   - name: xds_cluster
-    connect_timeout: 0.25s
+    connect_timeout: 5s
     type: STATIC
     lb_policy: ROUND_ROBIN
     http_protocol_options: {}
