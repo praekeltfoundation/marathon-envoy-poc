@@ -3,7 +3,7 @@ import os
 from flask import Flask, g, jsonify, request
 
 from .envoy import (
-    ApiConfigSource, Cluster, ClusterLoadAssignment, DiscoveryResponse,
+    Cluster, ClusterLoadAssignment, ConfigSource, DiscoveryResponse,
     HealthCheck, LbEndpoint)
 from .marathon import (
     MarathonClient, get_number_of_app_ports, get_task_ip_and_ports,
@@ -34,13 +34,13 @@ def get_marathon():
     return g.marathon
 
 
-def own_api_config_source():
+def own_config_source():
     """
     The config to connect to this API. For specifying the EDS and RDS
     endpoints.
     """
-    return ApiConfigSource(flask_app.config["CLUSTER_NAME"],
-                           flask_app.config["REFRESH_DELAY"])
+    return ConfigSource(flask_app.config["CLUSTER_NAME"],
+                        flask_app.config["REFRESH_DELAY"])
 
 
 def truncate_object_name(object_name):
@@ -101,7 +101,7 @@ def clusters():
             cluster_name = truncate_object_name(service_name)
 
             clusters.append(Cluster(
-                cluster_name, service_name, own_api_config_source(),
+                cluster_name, service_name, own_config_source(),
                 flask_app.config["CLUSTER_CONNECT_TIMEOUT"],
                 health_checks=[HealthCheck(
                     flask_app.config["CLUSTER_HEALTHCHECK_TIMEOUT"],

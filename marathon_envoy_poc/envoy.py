@@ -9,15 +9,21 @@ def Duration(seconds, nanos=0):
     }
 
 
-def ApiConfigSource(cluster_name, refresh_delay, api_type="REST"):
-    # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/base.proto#apiconfigsource
+def ConfigSource(cluster_name, refresh_delay, api_type="REST"):
+    # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/base.proto.html#configsource
     return {
-        "api_type": api_type,
-        # NOTE: "Multiple cluster names may be provided. If > 1 cluster is
-        # defined, clusters will be cycled through if any kind of failure
-        # occurs." -- we probably don't need this for a PoC.
-        "cluster_name": [cluster_name],
-        "refresh_delay": Duration(refresh_delay),
+        # "path": "...",
+        # TODO: Support other kinds of config sources
+        # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/base.proto#apiconfigsource
+        "api_config_source": {
+            "api_type": api_type,
+            # NOTE: "Multiple cluster names may be provided. If > 1 cluster is
+            # defined, clusters will be cycled through if any kind of failure
+            # occurs." -- we probably don't need this for a PoC.
+            "cluster_name": [cluster_name],
+            "refresh_delay": Duration(refresh_delay),
+        },
+        # "ads": "{...}"
     }
 
 
