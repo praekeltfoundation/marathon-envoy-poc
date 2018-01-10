@@ -122,10 +122,16 @@ def LbEndpoint(address, port, filter_metadata={}, load_balancing_weight=1):
     }
 
 
-def LocalityLbEndpoints(locality, lb_endpoints):
+def LocalityLbEndpoints(region, lb_endpoints):
     # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/eds.proto#localitylbendpoints
     return {
-        "locality": locality,
+        # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/base.proto.html#locality
+        "locality": {
+            "region": region,
+            # TODO: Support zones e.g. region => AWS region, zone => AWS AZ
+            # "zone": "...",
+            # "sub_zone": "..."
+        },
         "lb_endpoints": lb_endpoints,
         # Optional: load_balancing_weight
         # Optional: priority
