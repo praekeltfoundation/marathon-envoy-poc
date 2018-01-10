@@ -11,7 +11,7 @@ class _ConfigBase:
     HAPROXY_GROUP = os.environ.get("HAPROXY_GROUP", "external")
 
     # Name of our service in Envoy
-    CLUSTER_NAME = os.environ.get("CLUSTER_NAME", "xds_service")
+    CLUSTER_NAME = os.environ.get("CLUSTER_NAME", "xds_cluster")
     # Seconds between polls of our service
     REFRESH_DELAY = os.environ.get("REFRESH_DELAY", 30)
 
