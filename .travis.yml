@@ -1,0 +1,6 @@
+language: python
+python: '3.6'
+
+before_install: pip install --upgrade pip
+install: pip install -r dev-requirements.txt
+script: flake8 .
