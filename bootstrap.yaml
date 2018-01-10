@@ -20,4 +20,7 @@ static_resources:
     type: STATIC
     lb_policy: ROUND_ROBIN
     http_protocol_options: {}
-    hosts: [{ socket_address: { address: 172.17.0.2, port_value: 5000 }}]
+    # This address needs to be updated with the address to reach the Flask app
+    # Hint: With Docker bridge-mode networking with very default settings on Linux,
+    # the address can be set to 172.17.0.1 to reach the host.
+    hosts: [{ socket_address: { address: 127.0.0.1, port_value: 5000 }}]
