@@ -84,6 +84,14 @@ def get_app_port_labels(app):
     return port_labels
 
 
+def default_healthcheck():
+    return HealthCheck(
+        flask_app.config["CLUSTER_HEALTHCHECK_TIMEOUT"],
+        flask_app.config["CLUSTER_HEALTHCHECK_INTERVAL"],
+        flask_app.config["CLUSTER_HEALTHCHECK_UNHEALTHY_THRESHOLD"],
+        flask_app.config["CLUSTER_HEALTHCHECK_HEALTHY_THRESHOLD"])
+
+
 @flask_app.route("/v2/discovery:clusters", methods=["POST"])
 def clusters():
     clusters = []
@@ -103,9 +111,7 @@ def clusters():
             clusters.append(Cluster(
                 cluster_name, service_name, own_config_source(),
                 flask_app.config["CLUSTER_CONNECT_TIMEOUT"],
-                health_checks=[HealthCheck(
-                    flask_app.config["CLUSTER_HEALTHCHECK_TIMEOUT"],
-                    flask_app.config["CLUSTER_HEALTHCHECK_INTERVAL"])]))
+                health_checks=[default_healthcheck()]))
 
     return jsonify(DiscoveryResponse(max_version, clusters, TYPE_CDS))
 
