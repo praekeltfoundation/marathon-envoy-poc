@@ -18,6 +18,8 @@ class _ConfigBase:
     HEALTHCHECK_TIMEOUT = 5
     HEALTHCHECK_INTERVAL = 30
 
+    MAX_OBJECT_NAME_LENGTH = 60
+
 
 class DevConfig(_ConfigBase):
     DEBUG = True

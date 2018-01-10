@@ -48,6 +48,18 @@ def own_api_config_source():
     }
 
 
+def truncate_object_name(object_name):
+    """ Truncate an object name if it is too long. """
+    max_len = flask_app.config["MAX_OBJECT_NAME_LENGTH"]
+    if len(object_name) > max_len:
+        flask_app.logger.warn(
+            "Object name '%s' is too long (%d > %d). It will be truncated.",
+            object_name, len(object_name), max_len)
+        prefix = "[...]"
+        object_name = prefix + object_name[-(max_len - len(prefix)):]
+    return object_name
+
+
 def should_consider_app(app):
     return any(get_app_port_labels(app))
 
@@ -92,12 +104,7 @@ def clusters():
 
             # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/cds.proto#cluster
             name = "{}_{}".format(app["id"], index)
-
-            if len(name) > 60:
-                flask_app.logger.warn(
-                    "Cluster name %s is too long. It will be truncated.",
-                    name)
-                name = "[...]" + name[-55:]
+            name = truncate_object_name(name)
 
             clusters.append({
                 "name": name,
