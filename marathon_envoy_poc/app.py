@@ -3,8 +3,8 @@ import os
 from flask import Flask, g, jsonify, request
 
 from .envoy import (
-    ClusterLoadAssignment, DiscoveryResponse, Duration, LbEndpoint,
-    TcpHealthCheck)
+    ApiConfigSource, Cluster, ClusterLoadAssignment, DiscoveryResponse,
+    HealthCheck, LbEndpoint)
 from .marathon import (
     MarathonClient, get_number_of_app_ports, get_task_ip_and_ports,
     haproxy_port_labels)
@@ -39,13 +39,8 @@ def own_api_config_source():
     The config to connect to this API. For specifying the EDS and RDS
     endpoints.
     """
-    return {
-        "api_config_source": {
-            "api_type": "REST",
-            "cluster_name": flask_app.config["CLUSTER_NAME"],
-            "refresh_delay": Duration(flask_app.config["REFRESH_DELAY"]),
-        }
-    }
+    return ApiConfigSource(flask_app.config["CLUSTER_NAME"],
+                           flask_app.config["REFRESH_DELAY"])
 
 
 def truncate_object_name(object_name):
@@ -102,32 +97,15 @@ def clusters():
             max_version = max(
                 max_version, app["versionInfo"]["lastConfigChangeAt"])
 
-            # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/cds.proto#cluster
-            name = "{}_{}".format(app["id"], index)
-            name = truncate_object_name(name)
+            service_name = "{}_{}".format(app["id"], index)
+            cluster_name = truncate_object_name(service_name)
 
-            clusters.append({
-                "name": name,
-                "type": "EDS",
-                "eds_cluster_config": {
-                    "eds_config": own_api_config_source(),
-                    "service_name": name,
-                },
-                "connect_timeout": Duration(
-                    flask_app.config["CLUSTER_CONNECT_TIMEOUT"]),
-                "lb_policy": "ROUND_ROBIN",
-                "health_checks": [
-                    {
-                        "timeout": Duration(
-                            flask_app.config["CLUSTER_HEALTHCHECK_TIMEOUT"]),
-                        "interval": Duration(
-                            flask_app.config["CLUSTER_HEALTHCHECK_INTERVAL"]),
-                        "tcp_health_check": TcpHealthCheck(),
-                        # unhealthy_threshold
-                        # healthy_threshold
-                    }
-                ],
-            })
+            clusters.append(Cluster(
+                cluster_name, service_name, own_api_config_source(),
+                flask_app.config["CLUSTER_CONNECT_TIMEOUT"],
+                health_checks=[HealthCheck(
+                    flask_app.config["CLUSTER_HEALTHCHECK_TIMEOUT"],
+                    flask_app.config["CLUSTER_HEALTHCHECK_INTERVAL"])]))
 
     return jsonify(DiscoveryResponse(max_version, clusters, TYPE_CDS))
 
