@@ -1,12 +1,9 @@
 import binascii
 
 
-def Duration(seconds, nanos=0):
-    # https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#duration
-    return {
-        "seconds": str(seconds),  # Int64Value
-        "nanos": int(nanos),  # Int32Value
-    }
+def Duration(seconds):
+    # https://developers.google.com/protocol-buffers/docs/proto3#json
+    return "{}s".format(seconds)
 
 
 def ConfigSource(cluster_name, refresh_delay, api_type="REST"):
@@ -55,7 +52,7 @@ def HealthCheck(timeout, interval, unhealthy_threshold, healthy_threshold,
 
 
 def Any(type_url, data):
-    # https://developers.google.com/protocol-buffers/docs/proto3#json
+    # https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#any
     res = {"@type": type_url}
     res.update(data)
     return res
