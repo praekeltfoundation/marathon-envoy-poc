@@ -15,8 +15,9 @@ class _ConfigBase:
     # Seconds between polls of our service
     REFRESH_DELAY = os.environ.get("REFRESH_DELAY", 30)
 
-    HEALTHCHECK_TIMEOUT = 5
-    HEALTHCHECK_INTERVAL = 30
+    CLUSTER_CONNECT_TIMEOUT = 5
+    CLUSTER_HEALTHCHECK_TIMEOUT = 5
+    CLUSTER_HEALTHCHECK_INTERVAL = 30
 
     MAX_OBJECT_NAME_LENGTH = 60
 

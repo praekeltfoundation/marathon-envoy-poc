@@ -113,13 +113,15 @@ def clusters():
                     "eds_config": own_api_config_source(),
                     "service_name": name,
                 },
+                "connect_timeout": Duration(
+                    flask_app.config["CLUSTER_CONNECT_TIMEOUT"]),
                 "lb_policy": "ROUND_ROBIN",
                 "health_checks": [
                     {
                         "timeout": Duration(
-                            flask_app.config["HEALTHCHECK_TIMEOUT"]),
+                            flask_app.config["CLUSTER_HEALTHCHECK_TIMEOUT"]),
                         "interval": Duration(
-                            flask_app.config["HEALTHCHECK_INTERVAL"]),
+                            flask_app.config["CLUSTER_HEALTHCHECK_INTERVAL"]),
                         "tcp_health_check": TcpHealthCheck(),
                         # unhealthy_threshold
                         # healthy_threshold
