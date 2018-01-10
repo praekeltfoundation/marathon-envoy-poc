@@ -155,7 +155,9 @@ def get_cluster_load_assignment(cluster_name, app, tasks, port_index):
 
 @flask_app.route("/v2/discovery:endpoints", methods=["POST"])
 def endpoints():
-    discovery_request = request.get_json()
+    # Envoy does not send a 'content-type: application/json' header in this
+    # request so we must set force=True
+    discovery_request = request.get_json(force=True)
     resource_names = discovery_request["resource_names"]
 
     cluster_load_assignments = []
