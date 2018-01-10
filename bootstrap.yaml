@@ -19,5 +19,5 @@ static_resources:
     connect_timeout: 0.25s
     type: STATIC
     lb_policy: ROUND_ROBIN
-    http2_protocol_options: {}
+    http_protocol_options: {}
     hosts: [{ socket_address: { address: 127.0.0.1, port_value: 5000 }}]
