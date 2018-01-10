@@ -26,7 +26,7 @@ def Payload(data):
     return {"text": binascii.hexlify(data).decode("utf-8")}
 
 
-def HealthCheck(timeout, interval, tcp_send=b"", tcp_receive=[]):
+def HealthCheck(timeout, interval, tcp_send=b"\x00", tcp_receive=[]):
     # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/health_check.proto#healthcheck
     return {
         "timeout": Duration(timeout),
