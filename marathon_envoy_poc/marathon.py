@@ -14,20 +14,31 @@ class MarathonClient:
     def close(self):
         self._client.close()
 
-    def _request(self, path, **kwargs):
-        return self._client.get(
-            self._base_url + path, headers={"accept": "application/json"},
-            **kwargs)
+    def _request(self, method, path, **kwargs):
+        return self._client.request(method, self._base_url + path, **kwargs)
 
     def test(self):
-        assert self._request("/ping").text == "pong"
+        assert self._request("GET", "/ping").text == "pong"
+
+    def _get_json_field(self, path, field, **kwargs):
+        response = self._request(
+            "GET", path, headers={"accept": "application/json"}, **kwargs)
+
+        if response.status_code == 200:
+            return response.json()[field]
+        elif response.status_code == 404:
+            return None
+        else:
+            raise RuntimeError(
+                "Unexpected response code {} from {}: {}".format(
+                    response.status_code, path, response.text))
 
     def get_apps(self):
-        return self._request("/v2/apps").json()["apps"]
+        return self._get_json_field("/v2/apps", "apps")
 
     def get_app(self, app_id, embed=[]):
-        return self._request(
-            "/v2/apps{}".format(app_id), params={"embed": embed}).json()["app"]
+        return self._get_json_field(
+            "/v2/apps{}".format(app_id), "app", params={"embed": embed})
 
 
 def haproxy_port_labels(labels, port_index):
