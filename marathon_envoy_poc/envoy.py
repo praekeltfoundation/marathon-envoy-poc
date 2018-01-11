@@ -166,7 +166,7 @@ def Listener(name, address, port, filter_chains=[]):
     }
 
 
-def FilterChain(filters, sni_domains=""):
+def FilterChain(filters, sni_domains=[]):
     # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/lds.proto#filterchain
     return {
         "filter_chain_match": {"sni_domains": sni_domains},
