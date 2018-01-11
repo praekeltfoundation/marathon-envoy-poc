@@ -4,7 +4,8 @@ from flask import Flask, g, jsonify, request
 
 from .envoy import (
     Cluster, ClusterLoadAssignment, ConfigSource, DiscoveryResponse,
-    HealthCheck, LbEndpoint)
+    Filter, FilterChain, HealthCheck, HttpConnectionManager, LbEndpoint,
+    Listener, RouteConfiguration, VirtualHost)
 from .marathon import (
     MarathonClient, get_number_of_app_ports, get_task_ip_and_ports,
     haproxy_port_labels)
@@ -167,6 +168,10 @@ def endpoints():
         port_index = int(port_index)
 
         app = get_marathon().get_app(app_id, embed=["app.tasks"])
+        # App could've gone away
+        if not app:
+            continue
+
         tasks = app["tasks"]
         cluster_load_assignments.append(
             get_cluster_load_assignment(cluster_name, app, tasks, port_index))
@@ -181,12 +186,78 @@ def endpoints():
 @flask_app.route("/v2/discovery:listeners", methods=["POST"])
 def listeners():
     # TODO: Without TLS/SNI stuff, this is largely static
-    pass
+    filter_chains = [
+        FilterChain([
+            Filter("envoy.http_connection_manager",
+                   HttpConnectionManager("http", "http", own_config_source()))
+        ])
+    ]
+    listeners = [
+        Listener(
+            "http",
+            flask_app.config["HTTP_LISTEN_ADDR"],
+            flask_app.config["HTTP_LISTEN_PORT"],
+            filter_chains
+        )
+    ]
+
+    return jsonify(DiscoveryResponse("0", listeners, TYPE_LDS))
 
 
-@flask_app.route("/v2/discovery:routers", methods=["POST"])
-def routers():
-    pass
+def get_app_virtual_hosts(app):
+    virtual_hosts = []
+    port_labels = get_app_port_labels(app)
+    for index, labels in enumerate(port_labels):
+        if labels is None or "VHOST" not in labels:
+            continue
+
+        domains = labels["VHOST"].replace(",", " ").split()
+        if not domains:
+            continue
+
+        service_name = "{}_{}".format(app["id"], index)
+        cluster_name = truncate_object_name(service_name)
+
+        require_tls = labels.get("REDIRECT_TO_HTTPS") == "true"
+
+        virtual_hosts.append(
+            VirtualHost("http_{}_{}".format(app["id"], index), domains,
+                        cluster_name, require_tls))
+
+    return virtual_hosts
+
+
+@flask_app.route("/v2/discovery:routes", methods=["POST"])
+def routes():
+    # Envoy does not send a 'content-type: application/json' header in this
+    # request so we must set force=True
+    discovery_request = request.get_json(force=True)
+    resource_names = discovery_request["resource_names"]
+
+    apps = get_marathon().get_apps()
+
+    route_configurations = []
+    max_version = "0"
+    for route_config_name in resource_names:
+        # TODO: Support other routes
+        if route_config_name != "http":
+            return "Unknown route_config_name", 400
+
+        virtual_hosts = []
+        # This part is similar to CDS
+        for app in apps:
+            app_vhosts = get_app_virtual_hosts(app)
+            if app_vhosts:
+                virtual_hosts.extend(app_vhosts)
+                max_version = max(
+                    max_version, app["versionInfo"]["lastConfigChangeAt"])
+
+        # TODO: internal_only_headers
+        route_configurations.append(
+            RouteConfiguration(route_config_name, virtual_hosts, []))
+
+    return jsonify(
+        DiscoveryResponse(max_version, route_configurations, TYPE_RDS))
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -100,22 +100,24 @@ def Cluster(name, service_name, eds_config, connect_timeout, type="EDS",
     }
 
 
+def Address(address, port):
+    # FIXME: We only support socket addresses
+    # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/address.proto.html#envoy-api-msg-address
+    return {
+        # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/address.proto.html#socketaddress
+        "socket_address": {
+            "address": address,
+            "port_value": int(port),
+            "protocol": "TCP",
+        }
+    }
+
+
 def LbEndpoint(address, port, filter_metadata={}, load_balancing_weight=1):
     # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/eds.proto#envoy-api-msg-lbendpoint
     return {
         # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/base.proto.html#envoy-api-msg-endpoint
-        "endpoint": {
-            # FIXME: We only support socket addresses
-            # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/address.proto.html#envoy-api-msg-address
-            "address": {
-                # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/address.proto.html#socketaddress
-                "socket_address": {
-                    "address": address,
-                    "port_value": int(port),
-                    "protocol": "TCP",
-                }
-            }
-        },
+        "endpoint": {"address": Address(address, port)},
         # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/base.proto.html#envoy-api-msg-metadata
         "metadata": {"filter_metadata": filter_metadata},
         "load_balancing_weight": load_balancing_weight,
@@ -149,4 +151,128 @@ def ClusterLoadAssignment(cluster_name, lb_endpoints):
         "policy": {
             "drop_overload": 0.0,
         },
+    }
+
+
+def Listener(name, address, port, filter_chains=[]):
+    # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/lds.proto#listener
+    return {
+        "name": "http",
+        "address": Address(address, port),
+        "filter_chains": filter_chains,
+        # "use_original_dst": "{...}",
+        # "per_connection_buffer_limit_bytes": "{...}",
+        # "drain_type": "..."
+    }
+
+
+def FilterChain(filters, sni_domains=""):
+    # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/lds.proto#filterchain
+    return {
+        "filter_chain_match": {"sni_domains": sni_domains},
+        # "tls_context"?
+        "filters": filters,
+    }
+
+
+def Filter(name, config):
+    # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/lds.proto#filter
+    return {
+        "name": name,
+        "config": config,
+    }
+
+
+def AccessLog(path):
+    # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/filter/accesslog/accesslog.proto.html#envoy-api-msg-filter-accesslog-accesslog
+    return {
+        "name": "envoy.file_access_log",
+        # TODO: Support filters
+        # "filter": filter,
+        "config": {
+            "path": path,
+            # "format": "..."
+        }
+    }
+
+
+def HttpConnectionManager(stat_prefix, route_config_name, rds_config_source):
+    # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/filter/network/http_connection_manager.proto.html#filter-network-httpconnectionmanager
+    return {
+        "codec_type": "AUTO",
+        "stat_prefix": stat_prefix,
+        # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/filter/network/http_connection_manager.proto.html#filter-network-rds
+        "rds": {
+            "config_source": rds_config_source,
+            "route_config_name": route_config_name,
+        },
+        "http_filters": [
+            {
+                "name": "envoy.router",
+                "config": {
+                    # "dynamic_stats": "{...}",
+                    # "start_child_span": "...",
+                    # TODO: Make access logs configurable
+                    "upstream_log": AccessLog("upstream.log"),
+                },
+            }
+        ],
+        # "add_user_agent": "{...}",
+        # "tracing": "{...}",
+        # "http_protocol_options": "{...}",
+        # "http2_protocol_options": "{...}",
+        # "server_name": "...",
+        # TODO: Do set idle_timeout
+        # "idle_timeout": "{...}",
+        # "drain_timeout": "{...}",
+        # TODO: Make access logs configurable
+        "access_log": [AccessLog("access.log")],
+        # TODO: Confirm this is what we want?
+        "use_remote_address": True,
+        # "generate_request_id": "{...}",
+        # "forward_client_cert_details": "...",
+        # "set_current_client_cert_details": "{...}"
+    }
+
+
+def RouteConfiguration(name, virtual_hosts, internal_only_headers):
+    # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/rds.proto#routeconfiguration
+    return {
+        "name": name,
+        "virtual_hosts": virtual_hosts,
+        "internal_only_headers": internal_only_headers,
+        # "response_headers_to_add": [],
+        # "response_headers_to_remove": [],
+        # "request_headers_to_add": [],
+        # "validate_clusters": "{...}"
+    }
+
+
+def VirtualHost(name, domains, cluster, require_tls):
+    # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/rds.proto#virtualhost
+    return {
+        "name": name,
+        "domains": domains,
+        # TODO: Support more routes per vhost
+        "routes": [Route(cluster)],
+        # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/rds.proto#enum-virtualhost-tlsrequirementtype
+        "require_tls": "ALL" if require_tls else "NONE",
+        # "virtual_clusters": [],
+        # "rate_limits": [],
+        # "request_headers_to_add": [],
+        # "response_headers_to_add": [],
+        # "response_headers_to_remove": [],
+        # "cors": "{...}"
+    }
+
+
+def Route(cluster):
+    # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/rds.proto#route
+    return {
+        # TODO: Support path matching, header matching
+        "match": {"prefix": "/"},
+        "route": {"cluster": cluster},
+        # "redirect": "{...}",
+        # "metadata": "{...}",
+        # "decorator": "{...}"
     }

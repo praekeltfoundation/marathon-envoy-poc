@@ -15,6 +15,9 @@ class _ConfigBase:
     # Seconds between polls of our service
     REFRESH_DELAY = os.environ.get("REFRESH_DELAY", 30)
 
+    HTTP_LISTEN_ADDR = os.environ.get("HTTP_LISTEN_ADDR", "0.0.0.0")
+    HTTP_LISTEN_PORT = os.environ.get("HTTP_LISTEN_PORT", 80)
+
     CLUSTER_CONNECT_TIMEOUT = 5
     CLUSTER_HEALTHCHECK_TIMEOUT = 5
     CLUSTER_HEALTHCHECK_INTERVAL = 30
