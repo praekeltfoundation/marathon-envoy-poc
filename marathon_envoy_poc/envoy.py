@@ -248,13 +248,13 @@ def RouteConfiguration(name, virtual_hosts, internal_only_headers):
     }
 
 
-def VirtualHost(name, domains, cluster, require_tls):
+def VirtualHost(name, domains, routes, require_tls):
     # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/rds.proto#virtualhost
     return {
         "name": name,
         "domains": domains,
         # TODO: Support more routes per vhost
-        "routes": [Route(cluster)],
+        "routes": routes,
         # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/rds.proto#enum-virtualhost-tlsrequirementtype
         "require_tls": "ALL" if require_tls else "NONE",
         # "virtual_clusters": [],
@@ -266,11 +266,29 @@ def VirtualHost(name, domains, cluster, require_tls):
     }
 
 
-def Route(cluster):
+def HeaderMatch(name, value, regex=False):
+    # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/rds.proto#headermatcher
+    return {
+        "name": name,
+        "value": value,
+        "regex": regex,
+    }
+
+
+def Route(cluster, prefix="/", authority=None):
     # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/rds.proto#route
     return {
-        # TODO: Support path matching, header matching
-        "match": {"prefix": "/"},
+        # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/rds.proto#routematch
+        "match": {
+            "prefix": prefix,
+            # TODO: Support path regex matching, other options
+            # "path": "...",
+            # "regex": "...",
+            # "case_sensitive": "{...}",
+            # "runtime": "{...}",
+            "headers": ([] if authority is None
+                        else [HeaderMatch(":authority", authority)]),
+        },
         "route": {"cluster": cluster},
         # "redirect": "{...}",
         # "metadata": "{...}",

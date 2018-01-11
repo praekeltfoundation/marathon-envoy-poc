@@ -5,10 +5,9 @@ from flask import Flask, g, jsonify, request
 from .envoy import (
     Cluster, ClusterLoadAssignment, ConfigSource, DiscoveryResponse,
     Filter, FilterChain, HealthCheck, HttpConnectionManager, LbEndpoint,
-    Listener, RouteConfiguration, VirtualHost)
+    Listener, Route, RouteConfiguration, VirtualHost)
 from .marathon import (
-    MarathonClient, get_number_of_app_ports, get_task_ip_and_ports,
-    haproxy_port_labels)
+    MarathonClient, get_number_of_app_ports, get_task_ip_and_ports)
 
 # Don't name the flask app 'app' as is usually done as it's easy to mix up with
 # a Marathon app
@@ -56,33 +55,23 @@ def truncate_object_name(object_name):
     return object_name
 
 
-def should_consider_app(app):
-    return any(get_app_port_labels(app))
+def find_port_labels(labels, port_index, prefix):
+    label_prefix = "{}_{}_".format(prefix, port_index)
+    return {
+        key[len(label_prefix):]: val for key, val in labels.items()
+        if key.startswith(label_prefix)
+    }
 
 
-def get_app_port_labels(app):
+def is_port_in_group(labels, port_index):
     """
-    Get a list of port labels. e.g. at index 1 will be a dict of the HAPROXY
-    labels relevant to port 1. Ports that do not have the correct GROUP label
-    will have None instead of a dict.
+    Does the given port index have labels that indicate it is in the correct
+    HAPROXY_GROUP.
     """
-    # Mostly copied from marathon-acme
-    labels = app["labels"]
-    app_group = labels.get("HAPROXY_GROUP")
+    port_group = labels.get(
+        "HAPROXY_{}_GROUP".format(port_index), labels.get("HAPROXY_GROUP"))
 
-    # Iterate through the ports, checking for corresponding labels
-    port_labels = []
-    for port_index in range(get_number_of_app_ports(app)):
-        # Get the port group label, defaulting to the app group label
-        port_group = labels.get(
-            "HAPROXY_{}_GROUP".format(port_index), app_group)
-
-        if port_group == flask_app.config["HAPROXY_GROUP"]:
-            port_labels.append(haproxy_port_labels(labels, port_index))
-        else:
-            port_labels.append(None)
-
-    return port_labels
+    return port_group == flask_app.config["HAPROXY_GROUP"]
 
 
 def default_healthcheck():
@@ -98,16 +87,14 @@ def clusters():
     clusters = []
     max_version = "0"
     for app in get_marathon().get_apps():
-        port_labels = get_app_port_labels(app)
-        for index, labels in enumerate(port_labels):
-            if labels is None:
+        for port_index in range(get_number_of_app_ports(app)):
+            if not is_port_in_group(app["labels"], port_index):
                 continue
 
             max_version = max(
                 max_version, app["versionInfo"]["lastConfigChangeAt"])
 
-            service_name = "{}_{}".format(app["id"], index)
-            cluster_name = truncate_object_name(service_name)
+            cluster_name, service_name = app_cluster(app["id"], port_index)
 
             clusters.append(Cluster(
                 cluster_name, service_name, own_config_source(),
@@ -118,21 +105,6 @@ def clusters():
 
 
 def get_cluster_load_assignment(cluster_name, app, tasks, port_index):
-    port_labels = get_app_port_labels(app)
-
-    # We have to check these things because they may have changed since the
-    # CDS request was made.
-    if port_index >= len(port_labels):
-        flask_app.logger.warn(
-            "App %s with port index %d is outside the range of ports (%d)",
-            app["id"], port_index, len(port_labels))
-        return ClusterLoadAssignment(cluster_name, [])  # no endpoints
-
-    if port_labels[port_index] is None:
-        flask_app.logger.warn(
-            "App %s with port index %d has no labels", app["id"], port_index)
-        return ClusterLoadAssignment(cluster_name, [])  # no endpoints
-
     endpoints = []
     for task in tasks:
         ip, ports = get_task_ip_and_ports(app, task)
@@ -143,11 +115,11 @@ def get_cluster_load_assignment(cluster_name, app, tasks, port_index):
             flask_app.logger.warn(
                 "Couldn't find ports for task %s", task["id"])
             continue
-        # FIXME: Do we need to check this?
-        if len(ports) != len(port_labels):
+
+        if port_index >= len(ports):
             flask_app.logger.warn(
-                "Unexpected number of ports for task %s. Expected %d, got %d",
-                task["id"], len(port_labels), len(ports))
+                "Somehow task '%s' doesn't have port with index %d, it only "
+                "has %d ports", task["id"], port_index, len(ports))
             continue
 
         endpoints.append(LbEndpoint(ip, ports[port_index]))
@@ -168,8 +140,28 @@ def endpoints():
         port_index = int(port_index)
 
         app = get_marathon().get_app(app_id, embed=["app.tasks"])
+
+        # We have to check these things because they may have changed since the
+        # CDS request was made--this is normal behaviour.
         # App could've gone away
         if not app:
+            flask_app.logger.debug(
+                "App '%s' endpoints requested but the app doesn't exist "
+                "anymore",  app["id"])
+            continue
+
+        # Port could've gone away
+        if port_index >= get_number_of_app_ports(app):
+            flask_app.logger.debug(
+                "App '%s' port %d endpoints requested but the port doesn't "
+                "exist anymore", app["id"], port_index)
+            continue
+
+        # Port labels could've changed
+        if not is_port_in_group(app["labels"], port_index):
+            flask_app.logger.debug(
+                "App '%s' port %d endpoints requested but the port isn't in "
+                "the correct group anymore", app["id"], port_index)
             continue
 
         tasks = app["tasks"]
@@ -204,27 +196,73 @@ def listeners():
     return jsonify(DiscoveryResponse("0", listeners, TYPE_LDS))
 
 
+def marathon_acme_cluster():
+    ma, _ = app_cluster(flask_app.config["MARATHON_ACME_APP_ID"],
+                        flask_app.config["MARATHON_ACME_PORT_INDEX"])
+    return ma
+
+
+def app_cluster(app_id, port_index):
+    service_name = "{}_{}".format(app_id, port_index)
+    return truncate_object_name(service_name), service_name
+
+
 def get_app_virtual_hosts(app):
     virtual_hosts = []
-    port_labels = get_app_port_labels(app)
-    for index, labels in enumerate(port_labels):
-        if labels is None or "VHOST" not in labels:
+    app_labels = app["labels"]
+    for port_index in range(get_number_of_app_ports(app)):
+        if not is_port_in_group(app_labels, port_index):
             continue
 
-        domains = labels["VHOST"].replace(",", " ").split()
-        if not domains:
+        vhost_domains = get_port_domains(
+            app_labels, port_index, "HAPROXY", "VHOST")
+        if not vhost_domains:
+            flask_app.logger.debug(
+                "App '%s' port %d has no domains in its HAPROXY_VHOST label. "
+                "It will be ignored.", app["id"], port_index)
             continue
 
-        service_name = "{}_{}".format(app["id"], index)
-        cluster_name = truncate_object_name(service_name)
+        marathon_acme_domains = get_port_domains(
+            app_labels, port_index, "MARATHON_ACME", "DOMAIN")
 
-        require_tls = labels.get("REDIRECT_TO_HTTPS") == "true"
+        cluster_name, service_name = app_cluster(app["id"], port_index)
+
+        routes = []
+        # Routes are matched in order, and we want marathon-acme to apply first
+        # NOTE: If a marathon-acme domain
+        for domain in marathon_acme_domains:
+            if domain not in vhost_domains:
+                flask_app.logger.warn(
+                    "App '%s' has marathon-acme domain (%s) that is not in "
+                    "the vhost domains", app["id"], domain)
+                continue
+
+            routes.append(Route(marathon_acme_cluster(),
+                                prefix="/.well-known/acme-challenge",
+                                # FIXME: authority match is probably overkill
+                                authority=domain))
+
+        # TODO: Support other prefixes
+        routes.append(Route(cluster_name, prefix="/"))
+
+        # TODO: Figure out how to *not* redirect marathon-acme requests to
+        # HTTPS.
+        require_tls = app_labels.get("REDIRECT_TO_HTTPS") == "true"
 
         virtual_hosts.append(
-            VirtualHost("http_{}_{}".format(app["id"], index), domains,
-                        cluster_name, require_tls))
+            VirtualHost(service_name, vhost_domains, routes, require_tls))
 
     return virtual_hosts
+
+
+def parse_domains(domain_str):
+    # TODO: Validate domains are valid
+    return domain_str.replace(",", " ").split()
+
+
+def get_port_domains(app_labels, port_index, prefix, label):
+    port_labels = find_port_labels(app_labels, port_index, prefix)
+    return parse_domains(port_labels.get(label, ""))
 
 
 @flask_app.route("/v2/discovery:routes", methods=["POST"])

@@ -18,6 +18,10 @@ class _ConfigBase:
     HTTP_LISTEN_ADDR = os.environ.get("HTTP_LISTEN_ADDR", "0.0.0.0")
     HTTP_LISTEN_PORT = os.environ.get("HTTP_LISTEN_PORT", 80)
 
+    MARATHON_ACME_APP_ID = os.environ.get(
+        "MARATHON_ACME_APP_ID", "marathon-acme")
+    MARATHON_ACME_PORT_INDEX = os.environ.get("MARATHON_ACME_PORT_INDEX", 0)
+
     CLUSTER_CONNECT_TIMEOUT = 5
     CLUSTER_HEALTHCHECK_TIMEOUT = 5
     CLUSTER_HEALTHCHECK_INTERVAL = 30
