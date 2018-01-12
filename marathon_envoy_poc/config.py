@@ -10,6 +10,9 @@ class _ConfigBase:
     SECRET_KEY = os.environ.get("SECRET_KEY", "change me")
     HAPROXY_GROUP = os.environ.get("HAPROXY_GROUP", "external")
 
+    LABEL_PREFIX_MARATHON_LB = os.environ.get(
+        "LABEL_PREFIX_MARATHON_LB", "HAPROXY")
+
     # Name of our service in Envoy
     CLUSTER_NAME = os.environ.get("CLUSTER_NAME", "xds_cluster")
     # Seconds between polls of our service

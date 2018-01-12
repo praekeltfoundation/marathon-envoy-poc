@@ -40,14 +40,6 @@ class MarathonClient:
         return self._get_json_field(
             "/v2/apps{}".format(app_id), "app", params={"embed": embed})
 
-
-def haproxy_port_labels(labels, port_index):
-    label_prefix = "HAPROXY_{}_".format(port_index)
-    return {
-        key[len(label_prefix):]: val for key, val in labels.items()
-        if key.startswith(label_prefix)
-    }
-
 # Below is roughly copied from marathon-lb:
 # https://github.com/mesosphere/marathon-lb/blob/v1.11.2/utils.py#L314-L437
 
