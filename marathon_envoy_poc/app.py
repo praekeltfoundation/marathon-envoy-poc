@@ -4,8 +4,8 @@ import os
 from flask import Flask, g, jsonify, request
 
 from .certs import (
-    certs_pem_bytes, get_cert_fingerprint, key_pem_bytes, load_cert_objs,
-    load_key_obj)
+    cert_fingerprint, fullchain_pem_bytes, key_pem_bytes, load_cert_obj,
+    load_chain_objs, load_key_obj)
 from .envoy import (
     Cluster, ClusterLoadAssignment, CommonTlsContext, ConfigSource,
     DiscoveryResponse, Filter, FilterChain, HealthCheck, HttpConnectionManager,
@@ -248,28 +248,35 @@ def http_filter_chains():
 
 def _get_cached_cert(domain, cert_id):
     if domain in g._certificates:
-        cached_certs, cached_key = g._certificates[domain]
+        cert, chain, key = g._certificates[domain]
         # We check the fingerprint only when fetching certs from the cache, not
         # when storing. Doesn't really matter if the cert we get from Vault
         # doesn't have the right ID, it will hopefully be the right cert when
         # we next try to fetch from Vault.
         # NOTE: We compare "raw" bytes here. This way, binascii will take of
         # uppercase vs lowercase hex encoding.
-        if get_cert_fingerprint(cached_certs) == binascii.dehexlify(cert_id):
-            return cached_certs, cached_key
+        if cert_fingerprint(cert) == binascii.dehexlify(cert_id):
+            return cert, chain, key
 
     return None
 
 
 def _get_vault_cert(domain):
-    cert_and_key = get_vault().get("/certificates/" + domain)
-    if cert_and_key is None:
+    cert = get_vault().get("/certificates/" + domain)
+    if cert is None:
         flask_app.logger.warn(
             "Certificate not found in Vault for domain %s", domain)
         return None
 
-    return (load_cert_objs(cert_and_key["cert"].encode("utf-8")),
-            load_key_obj(cert_and_key["key"].encode("utf-8")))
+    try:
+        return (load_cert_obj(cert["cert"].encode("utf-8")),
+                # Chain certificates optional
+                load_chain_objs(cert.get("chain", "").encode("utf-8")),
+                load_key_obj(cert["privkey"].encode("utf-8")))
+    except Exception as e:
+        flask_app.logger.warn(
+            "Error parsing Vault certificate for domain %s: %s", domain, e)
+        return None
 
 
 def get_certificates():
@@ -289,23 +296,23 @@ def get_certificates():
     certificates = {}
     for domain, cert_id in live_certs.items():
         # First, try get the certificate from the cache
-        cached_certs_and_key = _get_cached_cert(domain, cert_id)
-        if cached_certs_and_key is not None:
-            certificates[domain] = cached_certs_and_key
+        cached_cert = _get_cached_cert(domain, cert_id)
+        if cached_cert is not None:
+            certificates[domain] = cached_cert
         else:
             # Otherwise, fetch it from Vault
-            vault_certs_and_key = _get_vault_cert(domain)
-            if vault_certs_and_key is not None:
-                certificates[domain] = vault_certs_and_key
+            vault_cert = _get_vault_cert(domain)
+            if vault_cert is not None:
+                certificates[domain] = vault_cert
         # Removed certs are skipped
 
     # Update the cache
     g._certificates = certificates
 
-    # Finally, map the certificate and key objects back into PEM bytes so
-    # that they can be sent to Envoy
-    return {domain: (certs_pem_bytes(certs), key_pem_bytes(key))
-            for domain, (certs, key) in certificates.items()}
+    # Finally, map the certificate and key objects back into the right form for
+    # use by Envoy
+    return {domain: (fullchain_pem_bytes(certs, chain), key_pem_bytes(key))
+            for domain, (certs, chain, key) in certificates.items()}
 
 
 def https_filter_chains():

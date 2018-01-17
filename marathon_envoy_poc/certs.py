@@ -10,19 +10,25 @@ from cryptography.hazmat.primitives.serialization import (
 import pem
 
 
-def get_cert_fingerprint(certs):
-    # Generally the first certificate in the list is the one we want the
-    # fingerprint for. The second cert is the intermediary CA cert.
-    return certs[0].fingerprint(hashes.SHA1())
+def cert_fingerprint(cert):
+    return cert.fingerprint(hashes.SHA1())
 
 
-def load_cert_objs(certs_pem_bytes):
-    cert_pems = pem.parse(certs_pem_bytes)
-    if not cert_pems:
-        raise ValueError("Unable to parse any certificate data.")
+def load_cert_obj(cert_pem_bytes):
+    cert_pems = pem.parse(cert_pem_bytes)
+    if len(cert_pems) != 1:
+        raise ValueError(
+            "Unexpected number of certificates. Expected {}, got {}.".format(
+                1, len(cert_pems)))
 
-    return [load_pem_x509_certificate(cert_pem.as_bytes(), default_backend())
-            for cert_pem in cert_pems]
+    return load_pem_x509_certificate(
+        cert_pems[0].as_bytes(), default_backend())
+
+
+def load_chain_objs(chain_pem_bytes):
+    # 0 or more chain certificates
+    return [load_pem_x509_certificate(chain_pem.as_bytes())
+            for chain_pem in pem.parse(chain_pem_bytes)]
 
 
 def load_key_obj(key_pem_bytes):
@@ -37,8 +43,12 @@ def load_key_obj(key_pem_bytes):
         key_pems[0].as_bytes(), None, default_backend())
 
 
-def certs_pem_bytes(cert_objs):
-    return b"".join([cert.public_bytes(Encoding.PEM) for cert in cert_objs])
+def cert_pem_bytes(cert_obj):
+    return cert_obj.public_bytes(Encoding.PEM)
+
+
+def fullchain_pem_bytes(cert_obj, chain_objs):
+    return b"".join([cert_pem_bytes(cert) for cert in [cert_obj] + chain_objs])
 
 
 def key_pem_bytes(key_obj):
