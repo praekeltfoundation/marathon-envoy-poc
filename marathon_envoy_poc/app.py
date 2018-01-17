@@ -253,6 +253,8 @@ def _get_cached_cert(domain, cert_id):
         # when storing. Doesn't really matter if the cert we get from Vault
         # doesn't have the right ID, it will hopefully be the right cert when
         # we next try to fetch from Vault.
+        # NOTE: We compare "raw" bytes here. This way, binascii will take of
+        # uppercase vs lowercase hex encoding.
         if get_cert_fingerprint(cached_certs) == binascii.dehexlify(cert_id):
             return cached_certs, cached_key
 
