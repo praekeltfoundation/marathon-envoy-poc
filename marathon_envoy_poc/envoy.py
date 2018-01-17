@@ -17,7 +17,8 @@ def ConfigSource(cluster_name, refresh_delay, api_type="REST"):
             # NOTE: "Multiple cluster names may be provided. If > 1 cluster is
             # defined, clusters will be cycled through if any kind of failure
             # occurs." -- we probably don't need this for a PoC.
-            "cluster_name": [cluster_name],
+            # NOTE: Field name pluralised in unreleased Envoy version
+            "cluster_names": [cluster_name],
             "refresh_delay": Duration(refresh_delay),
         },
         # "ads": "{...}"
@@ -157,7 +158,7 @@ def ClusterLoadAssignment(cluster_name, lb_endpoints):
 def Listener(name, address, port, filter_chains=[]):
     # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/lds.proto#listener
     return {
-        "name": "http",
+        "name": name,
         "address": Address(address, port),
         "filter_chains": filter_chains,
         # "use_original_dst": "{...}",
@@ -166,13 +167,16 @@ def Listener(name, address, port, filter_chains=[]):
     }
 
 
-def FilterChain(filters, sni_domains=[]):
+def FilterChain(filters, sni_domains=[], common_tls_context=None):
     # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/lds.proto#filterchain
-    return {
+    chain = {
         "filter_chain_match": {"sni_domains": sni_domains},
-        # "tls_context"?
         "filters": filters,
     }
+    if common_tls_context is not None:
+        # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/sds.proto.html#downstreamtlscontext
+        chain["tls_context"] = {"common_tls_context": common_tls_context}
+    return chain
 
 
 def Filter(name, config):
@@ -180,6 +184,23 @@ def Filter(name, config):
     return {
         "name": name,
         "config": config,
+    }
+
+
+def CommonTlsContext(
+        certificate_chain, private_key, alpn_protocols="h2,http/1.1"):
+    # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/sds.proto.html#commontlscontext
+    return {
+        # "tls_params": "{...}",
+        "tls_certificates": [{
+            # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/sds.proto.html#tlscertificate
+            # NOTE: inline_bytes in DataSource for certs is pending this PR:
+            # https://github.com/envoyproxy/envoy/pull/2248
+            "certificate_chain": {"inline_bytes": certificate_chain},
+            "private_key": {"inline_bytes": private_key},
+        }],
+        # "validation_context": "{...}",
+        "alpn_protocols": [alpn_protocols]
     }
 
 

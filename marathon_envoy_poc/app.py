@@ -3,11 +3,12 @@ import os
 from flask import Flask, g, jsonify, request
 
 from .envoy import (
-    Cluster, ClusterLoadAssignment, ConfigSource, DiscoveryResponse,
-    Filter, FilterChain, HealthCheck, HttpConnectionManager, LbEndpoint,
-    Listener, RouteConfiguration, VirtualHost)
+    Cluster, ClusterLoadAssignment, CommonTlsContext, ConfigSource,
+    DiscoveryResponse, Filter, FilterChain, HealthCheck, HttpConnectionManager,
+    LbEndpoint, Listener, RouteConfiguration, VirtualHost)
 from .marathon import (
     MarathonClient, get_number_of_app_ports, get_task_ip_and_ports)
+from .vault import VaultClient
 
 # Don't name the flask app 'app' as is usually done as it's easy to mix up with
 # a Marathon app
@@ -32,6 +33,26 @@ def get_marathon():
     if not hasattr(g, "marathon"):
         g.marathon = connect_marathon()
     return g.marathon
+
+
+def connect_vault():
+    if flask_app.config["VAULT_TOKEN"] is None:
+        flask_app.logger.warn(
+            "VAULT_TOKEN config option not set. Unable to create Vault client."
+        )
+        return None
+
+    client = VaultClient(
+        flask_app.config["VAULT"], flask_app.config["VAULT_TOKEN"],
+        flask_app.config["MARATHON_ACME_VAULT_PATH"])
+    client.test()
+    return client
+
+
+def get_vault():
+    if not hasattr(g, "vault"):
+        g.vault = connect_vault()
+    return g.vault
 
 
 def own_config_source():
@@ -209,21 +230,79 @@ def endpoints():
         DiscoveryResponse(max_version, cluster_load_assignments, TYPE_EDS))
 
 
-@flask_app.route("/v2/discovery:listeners", methods=["POST"])
-def listeners():
-    # TODO: Without TLS/SNI stuff, this is largely static
-    filter_chains = [
+def http_filter_chains():
+    return [
         FilterChain([
             Filter("envoy.http_connection_manager",
                    HttpConnectionManager("http", "http", own_config_source()))
         ])
     ]
+
+
+def get_certificates():
+    if not hasattr(g, "live_certs"):
+        g.live_certs = {}
+    if not hasattr(g, "certificates"):
+        g.certificates = {}
+
+    vault_client = get_vault()
+    if vault_client is None:
+        flask_app.logger.warn("Unable to fetch certificates: no Vault client.")
+        return g.certificates
+
+    # Get the mapping of domain name to x509 cert hash. This can be used to
+    # check our existing cache of certificates for changes.
+    live_certs = vault_client.get("/live")
+
+    # Regenerate the set of certificates, updating if certs added/changed
+    certificates = {}
+    for domain, cert_id in live_certs.items():
+        if domain in g.live_certs and g.live_certs[domain] == cert_id:
+            # Use the cached cert
+            certificates[domain] = g.certificates[domain]
+        else:
+            # Fetch a new cert
+            # TODO: Validate certificate data in some way
+            certificates[domain] = vault_client.get("/certificates/" + domain)
+        # Removed certs are skipped
+
+    # Update the caches
+    g.live_certs = live_certs
+    g.certificates = certificates
+
+    return g.certificates
+
+
+def https_filter_chains():
+    # NOTE: Filters must be identical across FilterChains
+    filters = [Filter(
+        "envoy.http_connection_manager",
+        HttpConnectionManager("https", "https", own_config_source()))]
+
+    # Fetch the certs from Vault
+    filter_chains = []
+    for domain, certificate in sorted(get_certificates().items()):
+        # TODO: Read domains from certificate to support SAN
+        tls_context = CommonTlsContext(certificate["cert"], certificate["key"])
+        filter_chains.append(FilterChain(
+            filters, sni_domains=[domain], common_tls_context=tls_context))
+    return filter_chains
+
+
+@flask_app.route("/v2/discovery:listeners", methods=["POST"])
+def listeners():
     listeners = [
         Listener(
             "http",
             flask_app.config["HTTP_LISTEN_ADDR"],
             flask_app.config["HTTP_LISTEN_PORT"],
-            filter_chains
+            http_filter_chains()
+        ),
+        Listener(
+            "https",
+            flask_app.config["HTTPS_LISTEN_ADDR"],
+            flask_app.config["HTTPS_LISTEN_PORT"],
+            https_filter_chains()
         )
     ]
 
@@ -274,9 +353,10 @@ def routes():
     route_configurations = []
     max_version = "0"
     for route_config_name in resource_names:
-        # TODO: Support other routes
-        if route_config_name != "http":
-            return "Unknown route_config_name", 400
+        if route_config_name not in ["http", "https"]:
+            flask_app.logger.warn(
+                "Unknown route config name: %s", route_config_name)
+            continue
 
         virtual_hosts = []
         # This part is similar to CDS

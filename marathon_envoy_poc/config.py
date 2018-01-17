@@ -18,8 +18,15 @@ class _ConfigBase:
     # Seconds between polls of our service
     REFRESH_DELAY = os.environ.get("REFRESH_DELAY", 30)
 
+    VAULT = os.environ.get("VAULT", "http://127.0.0.1:8200")
+    VAULT_TOKEN = os.environ.get("VAULT_TOKEN")
+    MARATHON_ACME_VAULT_PATH = os.environ.get(
+        "MARATHON_ACME_VAULT_PATH", "/secret/marathon-acme")
+
     HTTP_LISTEN_ADDR = os.environ.get("HTTP_LISTEN_ADDR", "0.0.0.0")
     HTTP_LISTEN_PORT = os.environ.get("HTTP_LISTEN_PORT", 80)
+    HTTPS_LISTEN_ADDR = os.environ.get("HTTPS_LISTEN_ADDR", "0.0.0.0")
+    HTTPS_LISTEN_PORT = os.environ.get("HTTPS_LISTEN_PORT", 443)
 
     CLUSTER_CONNECT_TIMEOUT = 5
     CLUSTER_HEALTHCHECK_TIMEOUT = 5
