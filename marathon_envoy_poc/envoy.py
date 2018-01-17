@@ -1,3 +1,4 @@
+from base64 import b64encode
 import binascii
 
 
@@ -196,8 +197,13 @@ def CommonTlsContext(
             # https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/sds.proto.html#tlscertificate
             # NOTE: inline_bytes in DataSource for certs is pending this PR:
             # https://github.com/envoyproxy/envoy/pull/2248
-            "certificate_chain": {"inline_bytes": certificate_chain},
-            "private_key": {"inline_bytes": private_key},
+            "certificate_chain": {
+                # protobuf bytes represented as base64 strings in JSON
+                "inline_bytes": b64encode(certificate_chain).decode("utf-8")
+            },
+            "private_key": {
+                "inline_bytes": b64encode(private_key).decode("utf-8")
+            },
         }],
         # "validation_context": "{...}",
         "alpn_protocols": [alpn_protocols]

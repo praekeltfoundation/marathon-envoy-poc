@@ -1,7 +1,11 @@
+import binascii
 import os
 
 from flask import Flask, g, jsonify, request
 
+from .certs import (
+    certs_pem_bytes, get_cert_fingerprint, key_pem_bytes, load_cert_objs,
+    load_key_obj)
 from .envoy import (
     Cluster, ClusterLoadAssignment, CommonTlsContext, ConfigSource,
     DiscoveryResponse, Filter, FilterChain, HealthCheck, HttpConnectionManager,
@@ -242,16 +246,38 @@ def http_filter_chains():
     return [FilterChain(default_http_conn_manager_filters("http"))]
 
 
+def _get_cached_cert(domain, cert_id):
+    if domain in g._certificates:
+        cached_certs, cached_key = g._certificates[domain]
+        # We check the fingerprint only when fetching certs from the cache, not
+        # when storing. Doesn't really matter if the cert we get from Vault
+        # doesn't have the right ID, it will hopefully be the right cert when
+        # we next try to fetch from Vault.
+        if get_cert_fingerprint(cached_certs) == binascii.dehexlify(cert_id):
+            return cached_certs, cached_key
+
+    return None
+
+
+def _get_vault_cert(domain):
+    cert_and_key = get_vault().get("/certificates/" + domain)
+    if cert_and_key is None:
+        flask_app.logger.warn(
+            "Certificate not found in Vault for domain %s", domain)
+        return None
+
+    return (load_cert_objs(cert_and_key["cert"].encode("utf-8")),
+            load_key_obj(cert_and_key["key"].encode("utf-8")))
+
+
 def get_certificates():
-    if not hasattr(g, "live_certs"):
-        g.live_certs = {}
-    if not hasattr(g, "certificates"):
-        g.certificates = {}
+    if not hasattr(g, "_certificates"):
+        g._certificates = {}
 
     vault_client = get_vault()
     if vault_client is None:
         flask_app.logger.warn("Unable to fetch certificates: no Vault client.")
-        return g.certificates
+        return {}
 
     # Get the mapping of domain name to x509 cert hash. This can be used to
     # check our existing cache of certificates for changes.
@@ -260,20 +286,24 @@ def get_certificates():
     # Regenerate the set of certificates, updating if certs added/changed
     certificates = {}
     for domain, cert_id in live_certs.items():
-        if domain in g.live_certs and g.live_certs[domain] == cert_id:
-            # Use the cached cert
-            certificates[domain] = g.certificates[domain]
+        # First, try get the certificate from the cache
+        cached_certs_and_key = _get_cached_cert(domain, cert_id)
+        if cached_certs_and_key is not None:
+            certificates[domain] = cached_certs_and_key
         else:
-            # Fetch a new cert
-            # TODO: Validate certificate data in some way
-            certificates[domain] = vault_client.get("/certificates/" + domain)
+            # Otherwise, fetch it from Vault
+            vault_certs_and_key = _get_vault_cert(domain)
+            if vault_certs_and_key is not None:
+                certificates[domain] = vault_certs_and_key
         # Removed certs are skipped
 
-    # Update the caches
-    g.live_certs = live_certs
-    g.certificates = certificates
+    # Update the cache
+    g._certificates = certificates
 
-    return g.certificates
+    # Finally, map the certificate and key objects back into PEM bytes so
+    # that they can be sent to Envoy
+    return {domain: (certs_pem_bytes(certs), key_pem_bytes(key))
+            for domain, (certs, key) in certificates.items()}
 
 
 def https_filter_chains():
@@ -284,9 +314,10 @@ def https_filter_chains():
 
     # Fetch the certs from Vault
     filter_chains = []
-    for domain, certificate in sorted(get_certificates().items()):
+    certificates = get_certificates()
+    for domain, (cert_chain, private_key) in sorted(certificates.items()):
         # TODO: Read domains from certificate to support SAN
-        tls_context = CommonTlsContext(certificate["cert"], certificate["key"])
+        tls_context = CommonTlsContext(cert_chain, private_key)
         filter_chains.append(FilterChain(
             filters, sni_domains=[domain], common_tls_context=tls_context))
     return filter_chains
