@@ -230,13 +230,16 @@ def endpoints():
         DiscoveryResponse(max_version, cluster_load_assignments, TYPE_EDS))
 
 
-def http_filter_chains():
+def default_http_conn_manager_filters(name):
     return [
-        FilterChain([
-            Filter("envoy.http_connection_manager",
-                   HttpConnectionManager("http", "http", own_config_source()))
-        ])
+        Filter("envoy.http_connection_manager",
+               # Params are: name, stats_prefix, api_config_source
+               HttpConnectionManager(name, name, own_config_source()))
     ]
+
+
+def http_filter_chains():
+    return [FilterChain(default_http_conn_manager_filters("http"))]
 
 
 def get_certificates():
@@ -274,10 +277,10 @@ def get_certificates():
 
 
 def https_filter_chains():
-    # NOTE: Filters must be identical across FilterChains
-    filters = [Filter(
-        "envoy.http_connection_manager",
-        HttpConnectionManager("https", "https", own_config_source()))]
+    # NOTE: Filters must be identical across FilterChains for a given listener.
+    # Currently, Envoy only supports multiple FilterChains in order to support
+    # SNI.
+    filters = default_http_conn_manager_filters("https")
 
     # Fetch the certs from Vault
     filter_chains = []
