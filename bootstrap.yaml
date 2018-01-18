@@ -7,12 +7,13 @@ dynamic_resources:
   lds_config:
     api_config_source:
       api_type: REST
-      cluster_name: [xds_cluster]
+      # NOTE: "cluster_name" field pluralised in an unreleased version of Envoy
+      cluster_names: [xds_cluster]
       refresh_delay: 30s
   cds_config:
     api_config_source:
       api_type: REST
-      cluster_name: [xds_cluster]
+      cluster_names: [xds_cluster]
       refresh_delay: 30s
 
 static_resources:
@@ -23,6 +24,6 @@ static_resources:
     lb_policy: ROUND_ROBIN
     http_protocol_options: {}
     # This address needs to be updated with the address to reach the Flask app
-    # Hint: With Docker bridge-mode networking with very default settings on Linux,
-    # the address can be set to 172.17.0.1 to reach the host.
+    # Hint: With Docker bridge-mode networking with very default settings on
+    # Linux, the address can be set to 172.17.0.1 to reach the host.
     hosts: [{ socket_address: { address: 127.0.0.1, port_value: 5000 }}]

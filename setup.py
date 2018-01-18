@@ -21,7 +21,9 @@ setup(
     packages=find_packages(),
     include_package_data=True,
     install_requires=[
+        "cryptography",
         "flask",
+        "pem",
         "requests",
     ],
     extras_require={
