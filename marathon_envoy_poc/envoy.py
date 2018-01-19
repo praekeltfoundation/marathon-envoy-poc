@@ -1,4 +1,3 @@
-from base64 import b64encode
 import binascii
 
 
@@ -199,10 +198,10 @@ def CommonTlsContext(
             # https://github.com/envoyproxy/envoy/pull/2248
             "certificate_chain": {
                 # protobuf bytes represented as base64 strings in JSON
-                "inline_bytes": b64encode(certificate_chain).decode("utf-8")
+                "inline_string": certificate_chain
             },
             "private_key": {
-                "inline_bytes": b64encode(private_key).decode("utf-8")
+                "inline_string": private_key
             },
         }],
         # "validation_context": "{...}",

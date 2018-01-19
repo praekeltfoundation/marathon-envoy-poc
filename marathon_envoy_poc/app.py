@@ -4,7 +4,7 @@ import os
 from flask import Flask, g, jsonify, request
 
 from .certs import (
-    cert_fingerprint, fullchain_pem_bytes, key_pem_bytes, load_cert_obj,
+    cert_fingerprint, fullchain_pem_str, key_pem_str, load_cert_obj,
     load_chain_objs, load_key_obj)
 from .envoy import (
     Cluster, ClusterLoadAssignment, CommonTlsContext, ConfigSource,
@@ -269,10 +269,10 @@ def _get_vault_cert(domain):
         return None
 
     try:
-        return (load_cert_obj(cert["cert"].encode("utf-8")),
+        return (load_cert_obj(cert["cert"]),
                 # Chain certificates optional
-                load_chain_objs(cert.get("chain", "").encode("utf-8")),
-                load_key_obj(cert["privkey"].encode("utf-8")))
+                load_chain_objs(cert.get("chain", "")),
+                load_key_obj(cert["privkey"]))
     except Exception as e:
         flask_app.logger.warn(
             "Error parsing Vault certificate for domain %s: %s", domain, e)
@@ -311,7 +311,7 @@ def get_certificates():
 
     # Finally, map the certificate and key objects back into the right form for
     # use by Envoy
-    return {domain: (fullchain_pem_bytes(certs, chain), key_pem_bytes(key))
+    return {domain: (fullchain_pem_str(certs, chain), key_pem_str(key))
             for domain, (certs, chain, key) in certificates.items()}
 
 
