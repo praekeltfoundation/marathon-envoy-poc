@@ -27,3 +27,7 @@ static_resources:
     # Hint: With Docker bridge-mode networking with very default settings on
     # Linux, the address can be set to 172.17.0.1 to reach the host.
     hosts: [{ socket_address: { address: 127.0.0.1, port_value: 5000 }}]
+    tls_context:
+      common_tls_context:
+        validation_context:
+          trusted_ca: {filename: vault-ca.pem}

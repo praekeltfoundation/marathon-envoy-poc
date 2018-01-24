@@ -20,8 +20,14 @@ class _ConfigBase:
 
     VAULT = os.environ.get("VAULT", "http://127.0.0.1:8200")
     VAULT_TOKEN = os.environ.get("VAULT_TOKEN")
-    MARATHON_ACME_VAULT_PATH = os.environ.get(
-        "MARATHON_ACME_VAULT_PATH", "/secret/marathon-acme")
+
+    VAULT_PKI_MOUNT = os.environ.get("VAULT_PKI_MOUNT", "pki")
+    VAULT_PKI_ROLE = os.environ.get("VAULT_PKI_ROLE", "marathon-envoy-poc")
+    VAULT_PKI_CN = os.environ.get("VAULT_PKI_CN", "marathon-envoy-poc")
+
+    VAULT_KV_MOUNT = os.environ.get("VAULT_KV_MOUNT", "secret")
+    MARATHON_ACME_KV_PATH = os.environ.get(
+        "MARATHON_ACME_KV_PATH", "marathon-acme")
 
     HTTP_LISTEN_ADDR = os.environ.get("HTTP_LISTEN_ADDR", "0.0.0.0")
     HTTP_LISTEN_PORT = os.environ.get("HTTP_LISTEN_PORT", 80)

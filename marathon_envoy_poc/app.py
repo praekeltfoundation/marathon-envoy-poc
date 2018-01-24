@@ -48,7 +48,10 @@ def connect_vault():
 
     client = VaultClient(
         flask_app.config["VAULT"], flask_app.config["VAULT_TOKEN"],
-        flask_app.config["MARATHON_ACME_VAULT_PATH"])
+        kv_mount="{}/{}".format(
+            flask_app.config["VAULT_KV_MOUNT"],
+            flask_app.config["MARATHON_ACME_KV_PATH"]),
+        pki_mount=flask_app.config["VAULT_PKI_MOUNT"])
     client.test()
     return client
 
@@ -262,7 +265,7 @@ def _get_cached_cert(domain, cert_id):
 
 
 def _get_vault_cert(domain):
-    cert = get_vault().get("/certificates/" + domain)
+    cert = get_vault().get_kv("certificates/" + domain)
     if cert is None:
         flask_app.logger.warn(
             "Certificate not found in Vault for domain %s", domain)
@@ -290,7 +293,7 @@ def get_certificates():
 
     # Get the mapping of domain name to x509 cert hash. This can be used to
     # check our existing cache of certificates for changes.
-    live_certs = vault_client.get("/live")
+    live_certs = vault_client.get_kv("live")
 
     # Regenerate the set of certificates, updating if certs added/changed
     certificates = {}
@@ -418,5 +421,6 @@ def routes():
         DiscoveryResponse(max_version, route_configurations, TYPE_RDS))
 
 
-if __name__ == "__main__":  # pragma: no cover
-    flask_app.run()
+def issue_vault_cert():
+    return get_vault().issue_cert(
+        flask_app.config["VAULT_PKI_ROLE"], flask_app.config["VAULT_PKI_CN"])
