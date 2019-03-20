@@ -1,6 +1,8 @@
 marathon-envoy-poc
 ==================
 
+**Please see Relay_ for a more complete implementation.**
+
 Proof of Concept Discovery Service (xDS) for the Envoy proxy. This sets up
 Envoy as an "edge" proxy in an attempt to replace marathon-lb.
 
@@ -43,3 +45,5 @@ you can remove the ``--net=host`` argument and add ``-p 9901:9901`` so that
 Envoy's admin interface is still available. You'll also need to update the
 address for the ``xds_cluster`` in ``bootstrap.yaml`` so that Envoy can reach
 the Flask app, wherever you are running it.
+
+.. _Relay: https://github.com/praekeltfoundation/relay
