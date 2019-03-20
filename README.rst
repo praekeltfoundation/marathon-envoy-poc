@@ -1,7 +1,7 @@
 marathon-envoy-poc
 ==================
 
-**Please see Relay_ for a more complete implementation.**
+Please see Relay_ for a more complete implementation.
 
 Proof of Concept Discovery Service (xDS) for the Envoy proxy. This sets up
 Envoy as an "edge" proxy in an attempt to replace marathon-lb.
